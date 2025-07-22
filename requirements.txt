@@ -4,7 +4,7 @@ streamlit
 # Data handling & computation
 pandas
 numpy
-statsmodel
+statsmodels
 
 # Interactive visualisation
 plotly
