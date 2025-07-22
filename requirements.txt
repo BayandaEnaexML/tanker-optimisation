@@ -1,0 +1,16 @@
+# Core dashboard framework
+streamlit
+
+# Data handling & computation
+pandas
+numpy
+statsmodel
+
+# Interactive visualisation
+plotly
+
+# Machine‑learning utilities
+scikit-learn
+
+# Excel I/O engine for pandas.read_excel
+openpyxl
