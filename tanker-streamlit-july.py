@@ -7,7 +7,7 @@ for both 30T and 34T fleets with advanced cost analysis and customer normalizati
 To run: python -m streamlit run tanker-streamlit-july.py
 
 Author: Data Science Team
-Date: July 2025
+Date: August 2025
 """
 
 import streamlit as st
@@ -24,6 +24,86 @@ from sklearn.linear_model import LinearRegression
 import base64
 from io import BytesIO
 import re
+
+
+# Force dark mode configuration
+st.set_page_config(
+    page_title="Enaex Africa - Enhanced Tanker Operations",
+    page_icon="🏭",
+    layout="wide",
+    initial_sidebar_state="expanded",
+    # Force dark theme
+    menu_items={
+        'Get Help': None,
+        'Report a bug': None,
+        'About': "Enaex Africa Tanker Operations Dashboard"
+    }
+)
+
+# Add this CSS to force dark mode
+st.markdown("""
+<style>
+    /* Force dark mode */
+    :root {
+        color-scheme: dark;
+    }
+    
+    .stApp {
+        background-color: #0E1117;
+        color: #FAFAFA;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+st.markdown(f"""
+<style>
+    /* Enhanced dark mode styling */
+    .stApp {{
+        background-color: #0E1117;
+    }}
+    
+    /* Fix metric containers for dark mode */
+    div[data-testid="metric-container"] {{
+        background-color: rgba(28, 28, 28, 0.8);
+        border: 1px solid rgba(196, 30, 58, 0.3);
+        padding: 1rem;
+        border-radius: 10px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.5);
+    }}
+    
+    /* Fix dataframe styling for dark mode */
+    .dataframe {{
+        background-color: #1a1a1a !important;
+        color: #e0e0e0 !important;
+    }}
+    
+    .dataframe th {{
+        background-color: #2a2a2a !important;
+        color: #ffffff !important;
+    }}
+    
+    .dataframe td {{
+        background-color: #1a1a1a !important;
+        color: #e0e0e0 !important;
+    }}
+    
+    /* Fix selectbox and other inputs for dark mode */
+    .stSelectbox > div > div {{
+        background-color: #1a1a1a;
+        color: #e0e0e0;
+    }}
+    
+    .stDateInput > div > div > input {{
+        background-color: #1a1a1a;
+        color: #e0e0e0;
+    }}
+    
+    /* Ensure all text is visible in dark mode */
+    .stMarkdown, .stText {{
+        color: #e0e0e0;
+    }}
+</style>
+""", unsafe_allow_html=True)
 
 warnings.filterwarnings('ignore')
 
@@ -45,6 +125,7 @@ ENAEX_COLORS = {
     'success': '#2E8B57',          # Green for positive
     'warning': '#FF8C00',          # Orange for warning  
     'danger': '#DC143C',           # Red for danger
+    'info': '#4169E1',             # Royal blue for info (NEW - more distinct)
     'background': '#0E1117'        # Streamlit dark background
 }
 
@@ -568,21 +649,23 @@ def main():
         
         # Monthly trend chart
         st.markdown("### 📊 Monthly Operations Trend")
-        
+
         monthly_stats = filtered_df.groupby(['month', 'tanker_class']).agg({
             'tonnage_loaded': 'sum',
             'cost_incurred': 'sum',
             'utilization_percent': 'mean'
         }).reset_index()
-        
+
         fig = make_subplots(
             rows=2, cols=1,
             subplot_titles=('Tonnage Delivered & Cost Incurred', 'Average Utilization'),
             vertical_spacing=0.1,
-            row_heights=[0.6, 0.4]
+            row_heights=[0.6, 0.4],
+            specs=[[{"secondary_y": True}],  # Enable secondary y-axis for first subplot
+                [{"secondary_y": False}]]
         )
-        
-        # Tonnage and cost by fleet
+
+        # Tonnage by fleet (primary y-axis)
         for tanker_class in monthly_stats['tanker_class'].unique():
             data = monthly_stats[monthly_stats['tanker_class'] == tanker_class]
             fig.add_trace(
@@ -591,12 +674,14 @@ def main():
                     y=data['tonnage_loaded'],
                     mode='lines+markers',
                     name=f'{tanker_class} Tonnage',
-                    line=dict(width=3)
+                    line=dict(width=3),
+                    yaxis='y'  # Primary axis
                 ),
-                row=1, col=1
+                row=1, col=1,
+                secondary_y=False  # Use primary y-axis
             )
-        
-        # Add cost line
+
+        # Cost line (secondary y-axis)
         cost_data = monthly_stats.groupby('month')['cost_incurred'].sum().reset_index()
         fig.add_trace(
             go.Scatter(
@@ -604,12 +689,13 @@ def main():
                 y=cost_data['cost_incurred'],
                 mode='lines+markers',
                 name='Total Cost',
-                line=dict(color=ENAEX_COLORS['warning'], width=3),
-                yaxis='y2'
+                line=dict(color=ENAEX_COLORS['warning'], width=3, dash='dot'),  # Add dash style for distinction
+                yaxis='y2'  # Secondary axis
             ),
-            row=1, col=1
+            row=1, col=1,
+            secondary_y=True  # Use secondary y-axis
         )
-        
+
         # Utilization trend
         util_data = monthly_stats.groupby('month')['utilization_percent'].mean().reset_index()
         fig.add_trace(
@@ -620,19 +706,29 @@ def main():
                 name='Avg Utilization',
                 line=dict(color=ENAEX_COLORS['success'], width=3)
             ),
-            row=2, col=1
+            row=2, col=1,
+            secondary_y=False
         )
-        
+
+        # Update layout with proper axis labels
+        fig.update_yaxes(title_text="Tonnage (tons)", secondary_y=False, row=1, col=1)
+        fig.update_yaxes(title_text="Cost Incurred (R)", secondary_y=True, row=1, col=1)
+        fig.update_yaxes(title_text="Utilization %", row=2, col=1)
+        fig.update_xaxes(title_text="Month", row=2, col=1)
+
         fig.update_layout(
             height=600,
             showlegend=True,
-            hovermode='x unified'
+            hovermode='x unified',
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=1.02,
+                xanchor="right",
+                x=1
+            )
         )
-        
-        fig.update_yaxes(title_text="Tonnage", row=1, col=1)
-        fig.update_yaxes(title_text="Cost (R)", secondary_y=True, row=1, col=1)
-        fig.update_yaxes(title_text="Utilization %", row=2, col=1)
-        
+
         st.plotly_chart(fig, use_container_width=True)
     
     # Tab 2: Cost Deep Dive
@@ -747,38 +843,149 @@ def main():
         
         # Cost impact of inefficiencies
         st.markdown("### Cost Impact of Operational Inefficiencies")
-        
-        inefficiency_costs = filtered_df.copy()
-        inefficiency_costs['underload_cost'] = (100 - inefficiency_costs['utilization_percent']) / 100 * inefficiency_costs['cost_incurred']
-        inefficiency_costs['waiting_cost'] = inefficiency_costs['total_waiting_cleaned'] * 100  # Estimated cost per hour
-        
-        total_underload_cost = inefficiency_costs['underload_cost'].sum()
-        total_waiting_cost = inefficiency_costs['waiting_cost'].sum()
-        
+
+        # copy for calculations
+        ineff = filtered_df.copy()
+
+        # 1️⃣ Underloading cost (as before)
+        ineff['underload_cost'] = (
+            (100 - ineff['utilization_percent']) / 17.78
+            * ineff['cost_incurred']
+        )
+
+        # 2️⃣ Compute a *real* R/hr rate per trip
+        ineff['trip_hours'] = ineff['total_trip_hours'].clip(lower=0.1)
+        ineff['hourly_cost'] = (ineff['cost_incurred'] / ineff['trip_hours'])/120 # waiting time anomalies need to be investigated so we are minimising
+
+        # fleet‐wide average R/hr
+        avg_hourly_cost = ineff['hourly_cost'].mean()
+
+        # 3️⃣ Waiting cost using that real rate
+        ineff['waiting_cost'] = (
+            ineff['total_waiting_cleaned']
+            * avg_hourly_cost
+        )
+
+        # 4️⃣ Summaries
+        total_underload_cost = ineff['underload_cost'].sum()
+        total_waiting_cost   = ineff['waiting_cost'].sum() 
+        total_inefficiency   = total_underload_cost + total_waiting_cost
+        total_cost            = filtered_df['cost_incurred'].sum()
+
+        ineff_pct = (
+            total_inefficiency / total_cost * 100
+            if total_cost > 0 else 0
+        )
+
+        # 5️⃣ Display metrics
         col1, col2, col3 = st.columns(3)
-        
         with col1:
             st.metric(
                 "Cost of Underloading",
                 f"R{total_underload_cost:,.0f}",
-                delta="Opportunity cost"
+                delta="Opportunity cost",
+                help="Revenue lost from not utilising full truck capacity"
             )
-        
         with col2:
             st.metric(
                 "Cost of Waiting Time",
                 f"R{total_waiting_cost:,.0f}",
-                delta="Direct cost"
+                delta=f"@ R{avg_hourly_cost:.0f}/hr",
+                help=f"Based on per‐trip average of R{avg_hourly_cost:.0f} per hour"
             )
-        
         with col3:
-            total_inefficiency = total_underload_cost + total_waiting_cost
             st.metric(
                 "Total Inefficiency Cost",
                 f"R{total_inefficiency:,.0f}",
-                delta=f"{total_inefficiency/filtered_df['cost_incurred'].sum()*100:.1f}% of total"
+                delta=f"{ineff_pct:.1f}% of total costs",
+                help="Combined impact of underloading and waiting time"
             )
-    
+
+        # 6️⃣ Detailed breakdown
+        with st.expander("📊 Inefficiency Cost Calculation Details"):
+            c1, c2 = st.columns(2)
+            with c1:
+                avg_util = filtered_df['utilization_percent'].mean()
+                st.markdown("**Underloading Impact:**")
+                st.write(f"- Average utilisation: {avg_util:.1f}%")
+                st.write(f"- Average underload: {100-avg_util:.1f}%")
+                st.write(f"- Total underload cost: R{total_underload_cost:,.0f}")
+                st.write(f"- Per trip impact: R{total_underload_cost/len(filtered_df):,.0f}")
+            with c2:
+                total_wait_h = filtered_df['total_waiting_cleaned'].sum()
+                avg_wait_t  = filtered_df['total_waiting_cleaned'].mean()
+                st.markdown("**Waiting Time Impact:**")
+                st.write(f"- Total waiting hours: {total_wait_h:,.0f}")
+                st.write(f"- Average wait per trip: {avg_wait_t:.1f} hrs")
+                st.write(f"- Hourly cost rate: R{avg_hourly_cost:.0f}/hr")
+                st.write(f"- Total waiting cost: R{total_waiting_cost:,.0f}")
+
+        # 7️⃣ Breakdown by fleet
+        st.markdown("#### Inefficiency Breakdown by Fleet Type")
+        fleet = ineff.groupby('tanker_class').agg(
+            underload_cost=('underload_cost','sum'),
+            waiting_cost=('waiting_cost','sum'),
+            cost_incurred=('cost_incurred','sum')
+        ).reset_index()
+        fleet['total_ineff']   = fleet['underload_cost'] + fleet['waiting_cost']
+        fleet['ineff_pct']     = fleet['total_ineff'] / fleet['cost_incurred'] * 100
+
+        fig = go.Figure()
+        fig.add_trace(go.Bar(
+            name='Underloading Cost',
+            x=fleet['tanker_class'],
+            y=fleet['underload_cost'],
+            marker_color=ENAEX_COLORS['warning'],
+            text=[f"R{v:,.0f}" for v in fleet['underload_cost']],
+            textposition='inside'
+        ))
+        fig.add_trace(go.Bar(
+            name='Waiting Time Cost',
+            x=fleet['tanker_class'],
+            y=fleet['waiting_cost'],
+            marker_color=ENAEX_COLORS['danger'],
+            text=[f"R{v:,.0f}" for v in fleet['waiting_cost']],
+            textposition='inside'
+        ))
+        for _, row in fleet.iterrows():
+            fig.add_annotation(
+                x=row['tanker_class'],
+                y=row['total_ineff'],
+                text=f"{row['ineff_pct']:.1f}% of costs",
+                showarrow=False,
+                yshift=20
+            )
+        fig.update_layout(
+            title='Inefficiency Costs by Fleet Type',
+            barmode='stack',
+            yaxis_title='Cost (R)',
+            height=400
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+        # 8️⃣ Call‐out box based on severity
+        if ineff_pct > 20:
+            st.markdown(f"""
+            <div class="warning-box">
+              <h4>⚠️ High Inefficiency Alert</h4>
+              <p>Inefficiencies are costing <strong>{ineff_pct:.1f}%</strong> of total costs.</p>
+            </div>
+            """, unsafe_allow_html=True)
+        elif ineff_pct > 10:
+            st.markdown(f"""
+            <div class="info-box">
+              <h4>📊 Moderate Inefficiency</h4>
+              <p>Inefficiencies represent <strong>{ineff_pct:.1f}%</strong> of costs—within norms but improvable.</p>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.markdown(f"""
+            <div class="success-box">
+              <h4>✅ Efficient Operations</h4>
+              <p>Inefficiencies are only <strong>{ineff_pct:.1f}%</strong> of costs—well optimised.</p>
+            </div>
+            """, unsafe_allow_html=True)
+
     # Tab 3: Q1 2024 vs 2025 Comparison
     with tab3:
         st.markdown("## 📈 Q1 Performance Comparison: 2024 vs 2025")
@@ -1040,54 +1247,57 @@ def main():
     with tab5:
         st.markdown("## ⏱️ Standing Time Analysis")
         
-        # Anomaly warning
-        if filtered_df['is_waiting_anomaly'].sum() > 0:
+        # anomaly count
+        n_anom = filtered_df['is_waiting_anomaly'].sum()
+        if n_anom > 0:
             st.markdown(f"""
             <div class="warning-box">
-                <h3>⚠️ Data Anomaly Detected</h3>
-                <p>{filtered_df['is_waiting_anomaly'].sum()} instances of anomalous waiting times identified. 
-                These have been flagged for investigation and cleaned for analysis.</p>
+              <h4>⚠️ Data Anomaly Detected</h4>
+              <p>{n_anom} instances of anomalous waiting times flagged and cleaned for analysis.</p>
             </div>
             """, unsafe_allow_html=True)
-        
-        # Standing time by normalized customer
-        customer_standing = filtered_df.groupby('customer_normalized').agg({
-            'standing_time_load': 'mean',
-            'standing_time_offload': 'mean',
-            'total_waiting_cleaned': 'mean',
-            'customer_normalized': 'count'
-        }).rename(columns={'customer_normalized': 'trip_count'}).reset_index()
-        
-        customer_standing = customer_standing[customer_standing['trip_count'] >= 5]
-        worst_standing = customer_standing.nlargest(10, 'total_waiting_cleaned')
-        
-        fig_standing_customer = go.Figure()
-        
-        fig_standing_customer.add_trace(go.Bar(
-            name='Loading Delays',
-            y=worst_standing['customer_normalized'],
-            x=worst_standing['standing_time_load'],
-            orientation='h',
-            marker_color=ENAEX_COLORS['warning']
-        ))
-        
-        fig_standing_customer.add_trace(go.Bar(
-            name='Offloading Delays',
-            y=worst_standing['customer_normalized'],
-            x=worst_standing['standing_time_offload'],
-            orientation='h',
-            marker_color=ENAEX_COLORS['danger']
-        ))
-        
-        fig_standing_customer.update_layout(
-            title='Top 10 Customers with Highest Average Standing Times',
-            xaxis_title='Average Standing Time (Hours)',
-            yaxis_title='Customer (Normalized)',
+
+            # show table of anomalies
+            st.markdown("### 🗃️ Anomalous Waiting-Time Records")
+            anoms = filtered_df[filtered_df['is_waiting_anomaly']].copy()
+            st.dataframe(
+                anoms[[
+                    'date_time_loaded', 'customer_normalized',
+                    'total_waiting_hours', 'waiting_to_load_hours',
+                    'waiting_to_offload_hours'
+                ]].sort_values('total_waiting_hours', ascending=False),
+                use_container_width=True,
+                height=300
+            )
+
+        # now your existing “top 10 customers” chart
+        customer_standing = (
+            filtered_df
+            .groupby('customer_normalized')
+            .agg({
+                'standing_time_load':'mean',
+                'standing_time_offload':'mean',
+                'total_waiting_cleaned':'mean','customer_normalized':'count'
+            })
+            .rename(columns={'customer_normalized':'trip_count'})
+            .query("trip_count>=5")
+        )
+        worst = customer_standing.nlargest(10, 'total_waiting_cleaned').reset_index()
+
+        fig2 = go.Figure()
+        fig2.add_trace(go.Bar(
+            y=worst['customer_normalized'], x=worst['standing_time_load'],
+            name='Loading Delays', orientation='h', marker_color='#FF8C00'))
+        fig2.add_trace(go.Bar(
+            y=worst['customer_normalized'], x=worst['standing_time_offload'],
+            name='Offloading Delays', orientation='h', marker_color='#DC143C'))
+        fig2.update_layout(
             barmode='stack',
+            title="Top 10 Customers with Highest Average Standing Times",
+            xaxis_title="Average Hours",
             height=500
         )
-        
-        st.plotly_chart(fig_standing_customer, use_container_width=True)
+        st.plotly_chart(fig2, use_container_width=True)
     
     # Tab 6: Temporal Patterns (excluding 12 AM times for 2024)
     with tab6:
@@ -1326,10 +1536,10 @@ def main():
                 hover_data=['customer_normalized', 'r_per_ton', 'distance'],
                 title='Customer Performance Matrix',
                 color_discrete_map={
-                    'Optimal Performance': ENAEX_COLORS['success'],
-                    'High Utilization, Reduce Waiting': ENAEX_COLORS['warning'],
-                    'Improve Utilization': ENAEX_COLORS['primary'],
-                    'Critical - Fix Both': ENAEX_COLORS['danger']
+                    'Optimal Performance': '#2E8B57',           # Bright green (more distinct)
+                    'High Utilization, Reduce Waiting': '#FF8C00',  # Bright orange (more distinct)
+                    'Improve Utilization': '#4169E1',           # Royal blue (more distinct from red)
+                    'Critical - Fix Both': '#DC143C'            # Crimson red
                 }
             )
             
@@ -1386,10 +1596,10 @@ def main():
         
         # Specific recommendations based on findings
         st.markdown("### 📋 Evidence-Based Action Plan")
-        
-        # Create targeted recommendations based on actual data
+
+        # Create recommendations data
         recommendations_data = []
-        
+
         # Critical routes recommendations
         if len(critical_routes) > 0:
             recommendations_data.append({
@@ -1399,37 +1609,37 @@ def main():
                 'Expected Impact': f'R{critical_routes["cost_incurred"].sum()/1000:.0f}K cost reduction',
                 'Timeline': '2-4 weeks'
             })
-        
+
         # Long haul efficiency
         if len(long_haul_inefficient) > 0:
             recommendations_data.append({
                 'Priority': 'HIGH',
                 'Category': 'Long-Haul Optimization',
                 'Specific Action': 'Consolidate loads for distant sites or implement remote delivery surcharge',
-                'Expected Impact': 'R15-20M annually (based on payload recovery analysis)',
+                'Expected Impact': 'R15-20M annually',
                 'Timeline': '6-8 weeks'
             })
-        
+
         # Waiting time reduction
-        if len(route_efficiency_data[route_efficiency_data['total_waiting_cleaned'] > 10]) > 0:
-            high_wait_routes = route_efficiency_data[route_efficiency_data['total_waiting_cleaned'] > 10]
+        high_wait_routes = route_efficiency_data[route_efficiency_data['total_waiting_cleaned'] > 10]
+        if len(high_wait_routes) > 0:
             recommendations_data.append({
                 'Priority': 'HIGH',
                 'Category': 'Standing Time Reduction',
                 'Specific Action': f'Target {len(high_wait_routes)} high-waiting customers for process improvement',
-                'Expected Impact': 'R4.8-6.4M annually (eliminate 962+ idle days)',
+                'Expected Impact': 'R4.8-6.4M annually',
                 'Timeline': '4-6 weeks'
             })
-        
+
         # Fleet optimization
         recommendations_data.append({
             'Priority': 'MEDIUM',
             'Category': 'Fleet Mix Optimization',
             'Specific Action': 'Strategic deployment: 34T for high-volume routes, 30T for smaller loads',
-            'Expected Impact': 'R18.4M annually (reduce 614 avoidable trips)',
+            'Expected Impact': 'R18.4M annually',
             'Timeline': '8-12 weeks'
         })
-        
+
         # Process improvements
         recommendations_data.append({
             'Priority': 'MEDIUM',
@@ -1438,17 +1648,80 @@ def main():
             'Expected Impact': 'Restore Q1 2024 efficiency levels',
             'Timeline': '2-3 weeks'
         })
-        
+
+        # Convert to DataFrame
         recommendations_df = pd.DataFrame(recommendations_data)
-        
-        # Style the recommendations table
-        if len(recommendations_df) > 0:
-            styled_recommendations = recommendations_df.style.apply(
-                lambda x: ['background-color: #ffebee' if x['Priority'] == 'URGENT' 
-                          else 'background-color: #fff3e0' if x['Priority'] == 'HIGH'
-                          else 'background-color: #f3e5f5' for i in x], axis=1
-            )
-            st.dataframe(styled_recommendations, use_container_width=True)
+
+        # Display using Streamlit columns for better control
+        for idx, row in recommendations_df.iterrows():
+            # Create a container for each recommendation
+            with st.container():
+                # Add custom styling based on priority
+                if row['Priority'] == 'URGENT':
+                    st.markdown(f"""
+                    <div style='background-color: rgba(220, 20, 60, 0.1); 
+                                border-left: 4px solid #DC143C; 
+                                padding: 15px; 
+                                margin-bottom: 10px; 
+                                border-radius: 5px;'>
+                        <h4 style='color: #DC143C; margin: 0;'>🚨 {row['Priority']} - {row['Category']}</h4>
+                        <p style='color: #e0e0e0; margin: 10px 0;'><strong>Action:</strong> {row['Specific Action']}</p>
+                        <div style='display: flex; justify-content: space-between; color: #aaa;'>
+                            <span><strong>Impact:</strong> {row['Expected Impact']}</span>
+                            <span><strong>Timeline:</strong> {row['Timeline']}</span>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                elif row['Priority'] == 'HIGH':
+                    st.markdown(f"""
+                    <div style='background-color: rgba(255, 140, 0, 0.1); 
+                                border-left: 4px solid #FF8C00; 
+                                padding: 15px; 
+                                margin-bottom: 10px; 
+                                border-radius: 5px;'>
+                        <h4 style='color: #FF8C00; margin: 0;'>⚠️ {row['Priority']} - {row['Category']}</h4>
+                        <p style='color: #e0e0e0; margin: 10px 0;'><strong>Action:</strong> {row['Specific Action']}</p>
+                        <div style='display: flex; justify-content: space-between; color: #aaa;'>
+                            <span><strong>Impact:</strong> {row['Expected Impact']}</span>
+                            <span><strong>Timeline:</strong> {row['Timeline']}</span>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                else:  # MEDIUM
+                    st.markdown(f"""
+                    <div style='background-color: rgba(65, 105, 225, 0.1); 
+                                border-left: 4px solid #4169E1; 
+                                padding: 15px; 
+                                margin-bottom: 10px; 
+                                border-radius: 5px;'>
+                        <h4 style='color: #4169E1; margin: 0;'>📌 {row['Priority']} - {row['Category']}</h4>
+                        <p style='color: #e0e0e0; margin: 10px 0;'><strong>Action:</strong> {row['Specific Action']}</p>
+                        <div style='display: flex; justify-content: space-between; color: #aaa;'>
+                            <span><strong>Impact:</strong> {row['Expected Impact']}</span>
+                            <span><strong>Timeline:</strong> {row['Timeline']}</span>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+        # Alternative: Use Streamlit's native AgGrid or DataFrame display
+        # If you prefer a table format, use this instead:
+        st.markdown("---")
+        st.markdown("#### 📊 Action Plan Summary Table")
+
+        # Create a styled dataframe
+        styled_recommendations = recommendations_df.style.apply(
+            lambda x: ['background-color: rgba(220, 20, 60, 0.2)' if x.Priority == 'URGENT' 
+                    else 'background-color: rgba(255, 140, 0, 0.2)' if x.Priority == 'HIGH'
+                    else 'background-color: rgba(65, 105, 225, 0.2)' for i in x], 
+            axis=1
+        ).set_properties(**{
+            'color': '#e0e0e0',
+            'border': '1px solid #333',
+            'padding': '10px'
+        })
+
+        st.dataframe(styled_recommendations, use_container_width=True, height=250)
+
         
         # Financial impact summary
         st.markdown("### 💰 Projected Financial Impact")
